@@ -7,6 +7,7 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     keyword = db.Column(db.String(200), nullable=False)
     url = db.Column(db.String(500), nullable=False)
+    notion_page_id = db.Column(db.String(100))
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -14,6 +15,7 @@ class Event(db.Model):
             'id': self.id,
             'keyword': self.keyword,
             'url': self.url,
+            'notion_page_id': self.notion_page_id,
             'timestamp': self.timestamp.strftime('%Y-%m-%d %H:%M:%S')
         }
 

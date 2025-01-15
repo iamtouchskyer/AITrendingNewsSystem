@@ -102,6 +102,26 @@
         .preview-btn:hover {
             background: #73d13d;
         }
+        .notion-btn {
+            background: #2eaadc;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .event-item:hover .notion-btn {
+            opacity: 1;
+        }
+        
+        .notion-btn:hover {
+            background: #1a8dbe;
+        }
     </style>
 </head>
 <body>
@@ -121,8 +141,8 @@
 
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                const keyword = this.value;
-                searchEvents(keyword);
+                e.preventDefault();
+                previewEvent();
             }
         });
 
@@ -149,6 +169,7 @@
                     </div>
                     <div class="event-actions">
                         <small>${event.timestamp}</small>
+                        <button class="notion-btn" onclick="addToNotion(${event.id})">加进Notion</button>
                         <button class="delete-btn" onclick="deleteEvent(${event.id})">删除</button>
                     </div>
                 </li>
@@ -167,11 +188,16 @@
         async function loadEvents() {
             try {
                 const response = await fetch('/api/events');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
+                console.log('加载的事件数据:', data);  // 添加调试日志
                 events = data;
                 renderEvents();
             } catch (error) {
                 console.error('加载事件失败:', error);
+                alert('加载事件列表失败，请刷新页面重试');
             }
         }
 
@@ -221,6 +247,26 @@
             } catch (error) {
                 console.error('预览失败:', error);
                 alert('预览生成失败，请稍后重试');
+            }
+        }
+
+        // 添加发布到 Notion 的函数
+        async function addToNotion(eventId) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/notion`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    alert('已成功添加到 Notion！');
+                } else {
+                    const data = await response.json();
+                    alert(data.message || '添加到 Notion 失败');
+                }
+            } catch (error) {
+                console.error('添加到 Notion 失败:', error);
+                alert('添加到 Notion 失败，请稍后重试');
             }
         }
     </script>
