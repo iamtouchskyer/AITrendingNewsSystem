@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>热点事件管理</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .search-box {
+            width: 100%;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            font-size: 1.2rem;
+            border: 2px solid #00a4ef;
+            border-radius: 5px;
+            outline: none;
+        }
+        .event-list {
+            list-style: none;
+            padding: 0;
+        }
+        .event-item {
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+        .event-item:hover {
+            background-color: #f5f5f5;
+        }
+        .event-item a {
+            color: #00a4ef;
+            text-decoration: none;
+        }
+        small {
+            color: #666;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        .logout-btn {
+            background: #00a4ef;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .event-content {
+            flex-grow: 1;
+        }
+        .delete-btn {
+            background: #ff4d4f;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .event-item:hover .delete-btn {
+            opacity: 1;
+        }
+        .delete-btn:hover {
+            background: #ff7875;
+        }
+        .event-actions {
+            display: flex;
+            align-items: center;
+        }
+        .search-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 2rem;
+        }
+        
+        .search-box {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        
+        .preview-btn {
+            background: #52c41a;
+            color: white;
+            border: none;
+            padding: 0 1.5rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+        
+        .preview-btn:hover {
+            background: #73d13d;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>热点事件管理</h1>
+        <button class="logout-btn" onclick="logout()">退出登录</button>
+    </div>
+    <div class="container">
+        <div class="search-container">
+            <input type="text" class="search-box" placeholder="想发布什么热点" id="searchInput">
+            <button class="preview-btn" onclick="previewEvent()">生成预览</button>
+        </div>
+        <ul class="event-list" id="eventList"></ul>
+    </div>
+    <script>
+        let events = [];
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const keyword = this.value;
+                searchEvents(keyword);
+            }
+        });
+
+        async function searchEvents(keyword) {
+            if (!keyword) return;
+            
+            try {
+                const response = await fetch(`/api/search?keyword=${encodeURIComponent(keyword)}`);
+                const data = await response.json();
+                
+                await loadEvents();
+                document.getElementById('searchInput').value = '';
+            } catch (error) {
+                console.error('搜索失败:', error);
+            }
+        }
+
+        function renderEvents() {
+            const list = document.getElementById('eventList');
+            list.innerHTML = events.map(event => `
+                <li class="event-item">
+                    <div class="event-content">
+                        <a href="${event.url}" target="_blank">${event.keyword}</a>
+                    </div>
+                    <div class="event-actions">
+                        <small>${event.timestamp}</small>
+                        <button class="delete-btn" onclick="deleteEvent(${event.id})">删除</button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function logout() {
+            window.location.href = '/';
+        }
+
+        // 检查登录状态
+        if (!sessionStorage.getItem('isLoggedIn')) {
+            window.location.href = '/';
+        }
+
+        async function loadEvents() {
+            try {
+                const response = await fetch('/api/events');
+                const data = await response.json();
+                events = data;
+                renderEvents();
+            } catch (error) {
+                console.error('加载事件失败:', error);
+            }
+        }
+
+        // 页面加载时获取已有事件
+        loadEvents();
+
+        // 添加删除事件的函数
+        async function deleteEvent(eventId) {
+            if (!confirm('确定要删除这条热点事件吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/events/${eventId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    // 从列表中移除该事件
+                    events = events.filter(event => event.id !== eventId);
+                    renderEvents();
+                    alert('删除成功');
+                } else {
+                    const data = await response.json();
+                    alert(data.message || '删除失败');
+                }
+            } catch (error) {
+                console.error('删除失败:', error);
+                alert('删除失败，请稍后重试');
+            }
+        }
+
+        async function previewEvent() {
+            const keyword = document.getElementById('searchInput').value;
+            if (!keyword) {
+                alert('请输入要搜索的热点内容');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/preview?keyword=${encodeURIComponent(keyword)}`);
+                const data = await response.json();
+                
+                if (data.url) {
+                    window.location.href = data.url;
+                }
+            } catch (error) {
+                console.error('预览失败:', error);
+                alert('预览生成失败，请稍后重试');
+            }
+        }
+    </script>
+</body>
+</html> 
