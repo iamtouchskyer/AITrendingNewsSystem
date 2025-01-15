@@ -13,6 +13,10 @@
 
 ## 安装部署
 
+# 自动更新并安装
+./update.sh
+
+# 或手动安装
 pip3 install -r requirements.txt
 
 python3 app.py
