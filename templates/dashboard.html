@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Notion Blog Manager - Dashboard</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .page-list {
+            margin-top: 20px;
+        }
+        .page-item {
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .generate-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .generate-btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Notion Pages</h1>
+        <div id="pageList" class="page-list">
+            Loading...
+        </div>
+    </div>
+
+    <script>
+        // 从 localStorage 获取 token
+        const token = localStorage.getItem('notionToken');
+        if (!token) {
+            window.location.href = '/';
+        }
+
+        // 获取页面列表
+        fetch(`/get_pages?token=${token}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const pageList = document.getElementById('pageList');
+                    pageList.innerHTML = '';
+                    
+                    data.pages.forEach(page => {
+                        const pageElement = document.createElement('div');
+                        pageElement.className = 'page-item';
+                        pageElement.innerHTML = `
+                            <span>${page.title}</span>
+                            <button class="generate-btn" onclick="generatePage('${page.id}')">生成页面</button>
+                        `;
+                        pageList.appendChild(pageElement);
+                    });
+                } else {
+                    document.getElementById('pageList').innerHTML = '加载失败：' + data.message;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('pageList').innerHTML = '加载失败，请重试';
+            });
+
+        function generatePage(pageId) {
+            fetch('/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    token: token,
+                    pageId: pageId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    window.open(data.previewUrl, '_blank');
+                } else {
+                    alert('生成失败：' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('生成失败，请重试');
+            });
+        }
+    </script>
+</body>
+</html> 

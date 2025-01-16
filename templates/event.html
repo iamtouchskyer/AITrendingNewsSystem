@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ event.title }}</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ event.title }}</h1>
+        {% for block in event.content %}
+            {% if block.type == 'paragraph' %}
+                <p>{{ block.content }}</p>
+            {% elif block.type == 'heading_1' %}
+                <h1>{{ block.content }}</h1>
+            {% elif block.type == 'heading_2' %}
+                <h2>{{ block.content }}</h2>
+            {% elif block.type == 'heading_3' %}
+                <h3>{{ block.content }}</h3>
+            {% elif block.type == 'bullet' %}
+                <ul><li>{{ block.content }}</li></ul>
+            {% elif block.type == 'image' %}
+                <figure>
+                    <img src="{{ block.url }}" alt="{{ block.caption }}">
+                    {% if block.caption %}
+                        <figcaption>{{ block.caption }}</figcaption>
+                    {% endif %}
+                </figure>
+            {% endif %}
+        {% endfor %}
+    </div>
+</body>
+</html> 
