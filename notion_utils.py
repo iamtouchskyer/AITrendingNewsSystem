@@ -15,6 +15,14 @@ class NotionManager:
 
     def create_page(self, title, content, url):
         try:
+            # 确保标题和内容是字符串
+            title = str(title) if title else ''
+            content = str(content) if content else ''
+            
+            # 打印调试信息
+            print(f"Creating Notion page with title: {title}")
+            print(f"URL: {url}")
+            
             # 首先验证数据库访问权限
             self.notion.databases.retrieve(self.database_id)
             

@@ -7,6 +7,8 @@ from models import db, Event, User
 from notion_utils import NotionManager
 from dotenv import load_dotenv
 import re
+import signal
+import sys
 
 load_dotenv()
 
@@ -20,6 +22,10 @@ db.init_app(app)
 # 确保events目录存在
 EVENTS_DIR = 'static/events'
 os.makedirs(EVENTS_DIR, exist_ok=True)
+
+# 添加新的配置
+GITHUB_PAGES_DIR = 'docs'  # GitHub Pages 默认使用 /docs 目录
+os.makedirs(GITHUB_PAGES_DIR, exist_ok=True)
 
 # 配置 Notion
 NOTION_TOKEN = os.getenv('NOTION_TOKEN')
@@ -39,6 +45,15 @@ def init_db():
             print("数据库初始化成功")  # 添加成功日志
     except Exception as e:
         print(f"数据库初始化错误: {str(e)}")  # 添加错误日志
+
+def signal_handler(sig, frame):
+    """处理退出信号"""
+    print('正在关闭应用...')
+    sys.exit(0)
+
+# 注册信号处理器
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 @app.route('/')
 def index():
@@ -105,24 +120,17 @@ def search():
     })
 
 def format_content_for_notion(keyword, bing_results, msn_results, baidu_results):
-    content = f"热点关键词：{keyword}\n\n"
+    content = ""
     
     if bing_results:
-        content += "Bing 搜索结果：\n"
         for result in bing_results:
-            content += f"- {result['title']}\n  {result['snippet']}\n  {result['link']}\n\n"
+            content += f"• {result.get('title', '')}\n{result.get('snippet', '')}\n{result.get('link', '')}\n\n"
     
     if msn_results:
-        content += "MSN 搜索结果：\n"
         for result in msn_results:
-            content += f"- {result['title']}\n  {result['snippet']}\n  {result['link']}\n\n"
+            content += f"• {result.get('title', '')}\n{result.get('snippet', '')}\n{result.get('link', '')}\n\n"
     
-    if baidu_results:
-        content += "百度搜索结果：\n"
-        for result in baidu_results:
-            content += f"- {result['title']}\n  {result['snippet']}\n  {result['link']}\n\n"
-    
-    return content
+    return content.strip()
 
 @app.route('/api/events')
 def get_events():
@@ -420,10 +428,10 @@ TEMPLATE = """
         }
         .content {
             flex: 1;
-            margin: 0;
             background: white;
             border-radius: 8px;
             padding: 20px;
+            margin-left: 310px;
         }
         .timeline {
             width: 300px;
@@ -431,6 +439,8 @@ TEMPLATE = """
             border-radius: 8px;
             padding: 20px;
             height: fit-content;
+            position: absolute;
+	left: 150px;
         }
         .timeline-item {
             position: relative;
@@ -639,11 +649,19 @@ def generate_results_page(keyword, bing_results, msn_results, baidu_results):
     
     # 生成唯一文件名
     filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{keyword}.html"
-    filepath = os.path.join(EVENTS_DIR, filename)
+    # 同时保存到 EVENTS_DIR 和 GITHUB_PAGES_DIR
+    events_filepath = os.path.join(EVENTS_DIR, filename)
+    github_filepath = os.path.join(GITHUB_PAGES_DIR, filename)
     
     # 保存文件
-    with open(filepath, 'w', encoding='utf-8') as f:
+    with open(events_filepath, 'w', encoding='utf-8') as f:
         f.write(html_content)
+    # 同时保存一份到 GitHub Pages 目录
+    with open(github_filepath, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    
+    # 更新索引页面
+    generate_index_page()
     
     return f"/static/events/{filename}"
 
@@ -688,14 +706,17 @@ def generate_preview_page(keyword, bing_results, msn_results):
                 background: white;
                 border-radius: 8px;
                 padding: 20px;
+		margin-left: 310px;
             }
-            .timeline {
-                width: 300px;
-                background: white;
-                border-radius: 8px;
-                padding: 20px;
-                height: fit-content;
-            }
+		.timeline {
+		    width: 300px;
+		    background: white;
+		    border-radius: 8px;
+		    padding: 20px;
+		    height: fit-content;
+		    position: absolute;
+		    left: 150px;
+		}
             .timeline-item {
                 position: relative;
                 padding-left: 24px;
@@ -962,31 +983,48 @@ def add_to_notion(event_id):
             'message': '该事件已经发布到 Notion'
         }), 400
     
-    # 重新获取搜索结果
-    bing_results = search_bing(event.keyword)
-    msn_results = search_msn(event.keyword)
-    
-    # 创建 Notion 页面
-    content = format_content_for_notion(event.keyword, bing_results, msn_results)
-    notion_page_id = notion_manager.create_page(
-        title=event.keyword,
-        content=content,
-        url=request.host_url + event.url.lstrip('/')
-    )
-    
-    if notion_page_id:
-        # 更新事件记录
-        event.notion_page_id = notion_page_id
-        db.session.commit()
+    try:
+        # 重新获取搜索结果
+        bing_results = search_bing(event.keyword)
+        msn_results = search_msn(event.keyword)
         
-        return jsonify({
-            'success': True,
-            'message': '成功添加到 Notion'
-        })
-    else:
+        # 创建 Notion 页面
+        content = format_content_for_notion(event.keyword, bing_results, msn_results, [])
+        
+        # 确保 URL 是完整的
+        full_url = request.host_url.rstrip('/') + event.url
+        
+        # 添加错误处理和日志
+        print(f"Creating Notion page for event {event_id}")
+        print(f"Content length: {len(content)}")
+        print(f"URL: {full_url}")
+        
+        notion_page_id = notion_manager.create_page(
+            title=event.keyword,
+            content=content,
+            url=full_url
+        )
+        
+        if notion_page_id:
+            # 更新事件记录
+            event.notion_page_id = notion_page_id
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': '成功添加到 Notion'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': '添加到 Notion 失败：无法创建页面'
+            }), 500
+            
+    except Exception as e:
+        print(f"Error adding to Notion: {str(e)}")
         return jsonify({
             'success': False,
-            'message': '添加到 Notion 失败'
+            'message': f'添加到 Notion 失败: {str(e)}'
         }), 500
 
 def delete_preview_files():
@@ -1143,7 +1181,94 @@ def extract_timeline_events(bing_results, msn_results, baidu_results):
     # 返回前10个事件
     return all_events[:10]
 
+def generate_index_page():
+    """生成 GitHub Pages 的索引页面"""
+    events = Event.query.order_by(Event.timestamp.desc()).all()
+    
+    index_html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>AI 热点事件</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            .event-list {
+                list-style: none;
+                padding: 0;
+            }
+            .event-item {
+                margin-bottom: 20px;
+                padding: 15px;
+                border: 1px solid #eee;
+                border-radius: 5px;
+            }
+            .event-time {
+                color: #666;
+                font-size: 14px;
+            }
+            .event-title {
+                margin: 5px 0;
+                font-size: 18px;
+            }
+            a {
+                color: #4e6ef2;
+                text-decoration: none;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>AI 热点事件</h1>
+        <div class="event-list">
+    """
+    
+    for event in events:
+        filename = os.path.basename(event.url)
+        index_html += f"""
+            <div class="event-item">
+                <div class="event-time">{event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}</div>
+                <div class="event-title">
+                    <a href="{filename}">{event.keyword}</a>
+                </div>
+            </div>
+        """
+    
+    index_html += """
+        </div>
+    </body>
+    </html>
+    """
+    
+    # 保存索引页面
+    with open(os.path.join(GITHUB_PAGES_DIR, 'index.html'), 'w', encoding='utf-8') as f:
+        f.write(index_html)
+
 if __name__ == '__main__':
     init_db()  # 初始化数据库
     delete_preview_files()  # 删除所有预览文件
-    app.run(debug=True) 
+   
+    # 如果是在 GitHub Actions 中运行
+    if os.getenv('GITHUB_ACTIONS'):
+        # 生成所有页面
+        events = Event.query.all()
+        for event in events:
+            # 直接从数据库生成静态页面
+            with open(os.path.join(EVENTS_DIR, os.path.basename(event.url)), 'r', encoding='utf-8') as f:
+                content = f.read()
+            # 保存到 GitHub Pages 目录
+            with open(os.path.join(GITHUB_PAGES_DIR, os.path.basename(event.url)), 'w', encoding='utf-8') as f:
+                f.write(content)
+        # 生成索引页面
+        generate_index_page()
+        print("静态页面生成完成")
+        sys.exit(0)
+    else:
+        # 正常运行应用
+        app.run(debug=True) 
